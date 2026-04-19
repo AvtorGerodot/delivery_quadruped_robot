@@ -1,0 +1,31 @@
+[project]
+name = "delivery-b2"
+version = "0.1.0"
+description = "Keyboard / SDK teleoperation of the Unitree B2 in the Genesis simulator"
+readme = "README.md"
+# Genesis requires Python <3.14 and we keep the lower bound aligned with the
+# rest of the project tooling.
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "numpy>=1.26",
+    "torch",
+    "genesis-world",
+    "unitree-sdk2py",
+    # Pinned by `Genesis/examples/locomotion/dynamic_ics_dog_train.py`.
+    "rsl-rl-lib==2.2.4",
+    "tensorboard",
+    # SDL-backed joystick API, used by src/examples/ds4_control.py.
+    "pygame>=2.5",
+]
+
+[tool.uv.sources]
+genesis-world = { path = "./Genesis", editable = true }
+unitree-sdk2py = { path = "./unitree_sdk2_python", editable = true }
+# Pull the CPU wheels for PyTorch by default; switch to a CUDA index in a
+# local override if GPU acceleration is desired.
+torch = [{ index = "pytorch-cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

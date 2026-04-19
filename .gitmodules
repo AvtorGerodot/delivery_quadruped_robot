@@ -1,0 +1,12 @@
+[submodule "cyclonedds"]
+	path = cyclonedds
+	url = ./Genesis
+[submodule "Genesis"]
+	path = Genesis
+	url = ./Genesis
+[submodule "unitree_ros"]
+	path = unitree_ros
+	url = ./unitree_ros
+[submodule "unitree_sdk2_python"]
+	path = unitree_sdk2_python
+	url = ./unitree_sdk2_python
