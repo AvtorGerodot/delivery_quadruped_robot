@@ -302,6 +302,16 @@ def main() -> None:
         choices=["cpu", "gpu"],
         help="Genesis backend. Use 'cpu' for smoke-tests on machines without CUDA.",
     )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default=None,
+        help=(
+            "Torch device for the RL policy / PPO updates, e.g. 'cuda', "
+            "'cuda:0', 'cpu'. Defaults to Genesis' own device (CUDA when "
+            "--backend gpu, CPU otherwise)."
+        ),
+    )
     args = parser.parse_args()
 
     env_cfg, obs_cfg, reward_cfg, command_cfg, target_cfg, dynamic_cfg = default_cfgs()
@@ -325,6 +335,33 @@ def main() -> None:
         performance_mode=True,
     )
 
+    if args.device is None:
+        policy_device = str(gs.device)
+    else:
+        policy_device = args.device
+        if policy_device.startswith("cuda") and not torch.cuda.is_available():
+            raise RuntimeError(
+                f"--device={policy_device} requested but torch.cuda.is_available() is False. "
+                "Install a CUDA-enabled PyTorch build (e.g. adjust the pytorch index in "
+                "pyproject.toml from pytorch-cpu to pytorch-cu121) and rerun."
+            )
+
+    env_device_str = str(gs.device)
+    if (
+        policy_device.startswith("cuda")
+        and not env_device_str.startswith("cuda")
+    ):
+        print(
+            f"[b2_train] WARNING: policy on {policy_device} but Genesis runs on "
+            f"{env_device_str}. This forces a host-device copy every step and "
+            "will be slow. Prefer `--backend gpu --device cuda` together."
+        )
+
+    print(
+        f"[b2_train] Genesis backend: {args.backend} (device={env_device_str})  "
+        f"| policy device: {policy_device}  | num_envs: {args.num_envs}"
+    )
+
     env = B2TargetEnv(
         num_envs=args.num_envs,
         env_cfg=env_cfg,
@@ -334,7 +371,7 @@ def main() -> None:
         target_cfg=target_cfg,
     )
 
-    runner = OnPolicyRunner(env, train_cfg, log_dir, device=gs.device)
+    runner = OnPolicyRunner(env, train_cfg, log_dir, device=policy_device)
     dynamic_learn(runner, env, args.max_iterations, dynamic_cfg, init_at_random_ep_len=True)
 
 

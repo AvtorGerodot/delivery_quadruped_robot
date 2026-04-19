@@ -211,8 +211,13 @@ class B2TargetEnv:
         self.dof_pos = torch.zeros_like(self.actions)
         self.dof_vel = torch.zeros_like(self.actions)
         self.last_dof_vel = torch.zeros_like(self.actions)
-        self.base_pos = self.init_base_pos.unsqueeze(0).expand(num_envs, -1).contiguous()
-        self.base_quat = self.init_base_quat.unsqueeze(0).expand(num_envs, -1).contiguous()
+        # NB: `.contiguous()` on an already-contiguous expanded tensor (e.g.
+        # when num_envs == 1) returns the same storage as the source, which
+        # aliases `init_base_pos` / `init_base_quat` and later breaks
+        # `base_pos.copy_(init_base_pos)` with a "refer to a single memory
+        # location" error. Use `.clone()` to always get an independent buffer.
+        self.base_pos = self.init_base_pos.unsqueeze(0).expand(num_envs, -1).clone()
+        self.base_quat = self.init_base_quat.unsqueeze(0).expand(num_envs, -1).clone()
         self.base_euler = torch.zeros((num_envs, 3), dtype=gs.tc_float, device=self.device)
         self.base_yaw = torch.zeros((num_envs,), dtype=gs.tc_float, device=self.device)
         self.default_dof_pos = torch.tensor(

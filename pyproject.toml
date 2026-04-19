@@ -8,7 +8,11 @@ readme = "README.md"
 requires-python = ">=3.11,<3.14"
 dependencies = [
     "numpy>=1.26",
-    "torch",
+    # CUDA 12.4 build of PyTorch for the RTX 4060 (driver 580 / CUDA runtime 13
+    # is backwards-compatible with cu124 wheels). Pulled from the pytorch-cu124
+    # index declared below.
+    "torch==2.10.0",
+    "torchvision==0.25.0",
     "genesis-world",
     "unitree-sdk2py",
     # Pinned by `Genesis/examples/locomotion/dynamic_ics_dog_train.py`.
@@ -21,11 +25,3 @@ dependencies = [
 [tool.uv.sources]
 genesis-world = { path = "./Genesis", editable = true }
 unitree-sdk2py = { path = "./unitree_sdk2_python", editable = true }
-# Pull the CPU wheels for PyTorch by default; switch to a CUDA index in a
-# local override if GPU acceleration is desired.
-torch = [{ index = "pytorch-cpu" }]
-
-[[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
-explicit = true
