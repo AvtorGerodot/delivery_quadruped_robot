@@ -280,6 +280,10 @@ class _VelocityBackend:
             float(self.env.init_base_pos[1].item()),
         )
         self._target_yaw = 0.0
+        # When non-None, bypasses the P-controller and forwards the stored
+        # (vx, vy, ω) tuple straight to the policy. Written by
+        # :meth:`set_raw_command`, cleared by :meth:`set_target`.
+        self._raw_command: tuple[float, float, float] | None = None
 
         self._draw_target = draw_target and show_viewer
         self._target_marker = None
@@ -313,6 +317,8 @@ class _VelocityBackend:
         y: float | None = None,
         yaw: float | None = None,
     ) -> None:
+        # Switching back to pose-target control disables any prior raw override.
+        self._raw_command = None
         if x is not None:
             self._target_xy = (float(x), self._target_xy[1])
         if y is not None:
@@ -320,7 +326,20 @@ class _VelocityBackend:
         if yaw is not None:
             self._target_yaw = float(yaw)
 
+    def set_raw_command(self, vx: float, vy: float, w: float) -> None:
+        """Bypass the pose-target P-controller and send a fixed body-frame
+        velocity command ``(vx, vy, ω)`` on every subsequent step, clamped to
+        the policy's training range.
+        """
+        self._raw_command = (
+            float(np.clip(vx, self.vx_lo, self.vx_hi)),
+            float(np.clip(vy, self.vy_lo, self.vy_hi)),
+            float(np.clip(w, self.w_lo, self.w_hi)),
+        )
+
     def _compute_command(self) -> tuple[float, float, float]:
+        if self._raw_command is not None:
+            return self._raw_command
         rx = float(self.env.base_pos[0, 0].item())
         ry = float(self.env.base_pos[0, 1].item())
         ryaw = float(self.env.base_yaw[0].item())
@@ -479,6 +498,21 @@ class Robot:
         """Advance the policy + simulation by ``n`` substeps."""
         self._backend.step(n)
 
+    def set_velocity(self, vx: float, vy: float, w: float) -> None:
+        """Send a constant body-frame velocity command ``(vx, vy, ω)``.
+
+        Only available in ``mode="velocity"``. Values are clipped to the
+        policy's training range (read from ``cfgs.pkl``). The override holds
+        until the next call to :meth:`set_target`, :meth:`move` or
+        :meth:`rotate`, which cancels it.
+        """
+        if self.mode != "velocity":
+            raise RuntimeError(
+                "set_velocity() is only available in mode='velocity'. "
+                "For the ball policy, use set_target()/move()/rotate() instead."
+            )
+        self._backend.set_raw_command(vx, vy, w)
+
     # ===================================================================
     # High-level intents (identical across modes)
     # ===================================================================
@@ -518,3 +552,37 @@ class Robot:
 
 
 __all__ = ["Robot"]
+
+
+if __name__ == "__main__":
+    # Demo: drive the robot on a circle for 10 seconds at constant body-frame
+    # velocity. Radius of the traced arc is roughly `LIN_VEL_X / ANG_VEL_YAW`.
+    #
+    # Reproduces the checkpoint used in:
+    #   uv run src/examples/b2_eval.py --mode velocity -e b2-walk-omni --ckpt 1200
+    EXP_NAME = "b2-walk-omni"
+    CKPT = 1200
+    DURATION_S = 10.0
+    LIN_VEL_X = 0.5        # m/s forward
+    LIN_VEL_Y = 0.0        # m/s lateral
+    ANG_VEL_YAW = 0.5      # rad/s → radius ≈ 1.0 m
+
+    robot = Robot(
+        exp_name=EXP_NAME,
+        ckpt=CKPT,
+        mode="velocity",
+        show_viewer=True,
+        backend="cpu",
+        draw_target=False,
+    )
+    try:
+        robot.set_velocity(vx=LIN_VEL_X, vy=LIN_VEL_Y, w=ANG_VEL_YAW)
+        n_steps = max(1, int(round(DURATION_S / robot.dt)))
+        print(
+            f"[api demo] driving circle: vx={LIN_VEL_X}, vy={LIN_VEL_Y}, "
+            f"w={ANG_VEL_YAW}, steps={n_steps}, dt={robot.dt:.4f}s"
+        )
+        robot.step(n_steps)
+        print(f"[api demo] final pos={robot.pos}, yaw={robot.yaw:.3f}")
+    finally:
+        robot.close()
