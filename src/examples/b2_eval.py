@@ -240,6 +240,14 @@ def _run_velocity(args) -> None:
     )
     env.enable_external_commands(True)
 
+    # The robot morphology is whatever was baked into cfgs.pkl at train time
+    # (plain B2 or B2+Z1). Surface it so it's obvious which model is loaded.
+    arm_joints = env_cfg.get("arm_joint_names", [])
+    print(
+        f"[velocity] urdf={os.path.basename(env_cfg.get('urdf_path', 'b2_description.urdf'))}"
+        + (f"  static arm: {len(arm_joints)} joints held" if arm_joints else "")
+    )
+
     ckpt = _resolve_ckpt_id(log_dir, args.ckpt)
     runner = OnPolicyRunner(env, train_cfg, log_dir, device=gs.device)
     runner.load(os.path.join(log_dir, f"model_{ckpt}.pt"))

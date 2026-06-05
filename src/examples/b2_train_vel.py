@@ -44,7 +44,7 @@ from rsl_rl.runners import OnPolicyRunner
 
 import genesis as gs
 
-from b2_vel_env import B2VelEnv, default_cfgs
+from b2_vel_env import ROBOTS, B2VelEnv, default_cfgs
 
 
 def get_train_cfg(exp_name: str, max_iterations: int) -> dict:
@@ -104,6 +104,16 @@ def _range_type(values):
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("-e", "--exp_name", type=str, default="b2-walk")
+    parser.add_argument(
+        "--robot",
+        type=str,
+        default="b2",
+        choices=sorted(ROBOTS),
+        help=(
+            "Robot morphology to train. 'b2' is the plain quadruped; 'b2_z1' "
+            "adds the Z1 arm on the back, held static during locomotion."
+        ),
+    )
     parser.add_argument("-B", "--num_envs", type=int, default=4096)
     parser.add_argument("--max_iterations", type=int, default=500)
     parser.add_argument("--seed", type=int, default=1)
@@ -149,7 +159,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    env_cfg, obs_cfg, reward_cfg, command_cfg = default_cfgs()
+    env_cfg, obs_cfg, reward_cfg, command_cfg = default_cfgs(robot=args.robot)
     if args.lin_vel_x_range is not None:
         command_cfg["lin_vel_x_range"] = _range_type(args.lin_vel_x_range)
     if args.lin_vel_y_range is not None:
@@ -191,8 +201,11 @@ def main() -> None:
             f"runs on {env_device_str}. Prefer `--backend gpu --device cuda`."
         )
     print(
-        f"[b2_train_vel] backend={args.backend} env_device={env_device_str} "
-        f"policy_device={policy_device} num_envs={args.num_envs}\n"
+        f"[b2_train_vel] robot={args.robot} backend={args.backend} "
+        f"env_device={env_device_str} policy_device={policy_device} "
+        f"num_envs={args.num_envs}\n"
+        f"  urdf={env_cfg['urdf_path']}\n"
+        f"  static arm joints: {env_cfg.get('arm_joint_names', [])}\n"
         f"  command ranges: lin_x={command_cfg['lin_vel_x_range']} "
         f"lin_y={command_cfg['lin_vel_y_range']} ang={command_cfg['ang_vel_range']}"
     )
