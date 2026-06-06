@@ -168,6 +168,13 @@ class B2Z1WholeBodyEnv:
                 merge_fixed_links=True,
             ),
         )
+        # Optional static scenery (e.g. the entrance MJCF for eval). Added AFTER
+        # the robot so the robot stays the first articulated entity (dof_start
+        # == 0), keeping control_dofs_position indexing correct.
+        extra_mjcf = env_cfg.get("extra_mjcf")
+        if extra_mjcf:
+            extra_pos = tuple(env_cfg.get("extra_mjcf_pos", (0.0, 0.0, 0.0)))
+            self.scene.add_entity(gs.morphs.MJCF(file=extra_mjcf, pos=extra_pos))
         self.scene.build(n_envs=num_envs)
 
         # --------------------------- Joint indexing --------------------------
@@ -197,6 +204,35 @@ class B2Z1WholeBodyEnv:
 
         # End-effector link handle (survives merge_fixed_links: revolute joint).
         self.ee_link = self.robot.get_link(self.ee_link_name)
+
+        # ---- Static (held) joints: e.g. the gripper, locked at a home angle.
+        # These are PD-held every step and never enter obs/actions.
+        self.static_joint_names = list(env_cfg.get("static_joint_names", []))
+        if self.static_joint_names:
+            self.static_dof_idx = torch.tensor(
+                [self.robot.get_joint(n).dof_start for n in self.static_joint_names],
+                dtype=gs.tc_int,
+                device=self.device,
+            )
+            self.static_default_pos = torch.tensor(
+                [env_cfg["static_default_angles"][n] for n in self.static_joint_names],
+                dtype=gs.tc_float,
+                device=self.device,
+            )
+            n_static = len(self.static_joint_names)
+            self.robot.set_dofs_kp(
+                [env_cfg.get("static_kp", 40.0)] * n_static, self.static_dof_idx
+            )
+            self.robot.set_dofs_kv(
+                [env_cfg.get("static_kd", 1.0)] * n_static, self.static_dof_idx
+            )
+            self._static_target = (
+                self.static_default_pos.unsqueeze(0).expand(num_envs, -1).contiguous()
+            )
+        else:
+            self.static_dof_idx = None
+            self.static_default_pos = None
+            self._static_target = None
 
         # ---------------------- Fixed constants -----------------------------
         self.global_gravity = torch.tensor(
@@ -375,6 +411,8 @@ class B2Z1WholeBodyEnv:
         exec_actions = self.last_actions if self.simulate_action_latency else self.actions
         target_dof_pos = exec_actions * self.action_scale + self.default_dof_pos
         self.robot.control_dofs_position(target_dof_pos, self.motors_dof_idx)
+        if self.static_dof_idx is not None:
+            self.robot.control_dofs_position(self._static_target, self.static_dof_idx)
         self.scene.step()
 
         self.episode_length_buf += 1
@@ -524,6 +562,13 @@ class B2Z1WholeBodyEnv:
             zero_velocity=True,
             envs_idx=envs_idx,
         )
+        if self.static_dof_idx is not None:
+            self.robot.set_dofs_position(
+                position=self.static_default_pos.unsqueeze(0).expand(n, -1).contiguous(),
+                dofs_idx_local=self.static_dof_idx,
+                zero_velocity=True,
+                envs_idx=envs_idx,
+            )
         try:
             self.robot.zero_all_dofs_velocity(envs_idx=envs_idx)
         except TypeError:

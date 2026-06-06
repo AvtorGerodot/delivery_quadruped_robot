@@ -10,3 +10,6 @@
 [submodule "unitree_sdk2_python"]
 	path = unitree_sdk2_python
 	url = ./unitree_sdk2_python
+[submodule "delivery_dog_ws"]
+	path = delivery_dog_ws
+	url = https://github.com/AvtorGerodot/delivery_dog_ws.git

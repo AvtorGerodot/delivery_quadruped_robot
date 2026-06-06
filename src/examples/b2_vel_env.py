@@ -145,6 +145,13 @@ class B2VelEnv:
                 merge_fixed_links=True,
             ),
         )
+        # Optional static scenery (e.g. the entrance MJCF for eval). Added AFTER
+        # the robot so the robot stays the first articulated entity and its
+        # dof_start == 0 (keeps control_dofs_position indexing correct).
+        extra_mjcf = env_cfg.get("extra_mjcf")
+        if extra_mjcf:
+            extra_pos = tuple(env_cfg.get("extra_mjcf_pos", (0.0, 0.0, 0.0)))
+            self.scene.add_entity(gs.morphs.MJCF(file=extra_mjcf, pos=extra_pos))
         self.scene.build(n_envs=num_envs)
 
         # --------------------------- Joint indexing --------------------------
